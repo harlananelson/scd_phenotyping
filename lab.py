@@ -43,7 +43,7 @@ FRAC_MAX = 105
 TFX_RANGE_THRESHOLD = 10
 
 # Post-transfusion threshold (days since actual transfusion)
-TFX_DAYS_THRESHOLD = 30
+TFX_DAYS_THRESHOLD = 180
 
 # Post-hydroxyurea threshold (days since HU prescription)
 HU_DAYS_THRESHOLD = 90
@@ -373,8 +373,15 @@ def add_actual_transfusion(
     df = df.copy()
 
     if tfx_df is None or tfx_df.empty:
+        # No actual transfusion file — use inferred status from HgbA/HgbS ranges
+        # Reference logic: InferTfxRow 'Post' or 'PostMaybe' → PostTfx='Y'
         df['DaysTfx'] = 99999
-        df['PostTfx'] = 'N'
+        if 'InferTfxRow' in df.columns:
+            df['PostTfx'] = np.where(
+                df['InferTfxRow'].isin(['Post', 'PostMaybe']), 'Y', 'N'
+            )
+        else:
+            df['PostTfx'] = 'N'
         return df
 
     # Merge lab dates with transfusion dates (on or before lab date)
