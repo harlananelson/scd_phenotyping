@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "scd_phenotyping"
+version = "2.0.0"
+description = "Hemoglobinopathy phenotyping from ICD codes and hemoglobin electrophoresis"
+requires-python = ">=3.8"
+dependencies = [
+    "pandas>=1.3",
+    "numpy>=1.20",
+    "duckdb>=0.8",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+scd-phenotype = "scd_phenotyping.icd:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
