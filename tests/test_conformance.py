@@ -25,8 +25,8 @@ def _make_row(**kwargs):
         'HgbA': 0, 'HgbA2': 0, 'HgbC': 0, 'HgbD': 0,
         'HgbE': 0, 'HgbF': 0, 'HgbS': 0, 'HgbO': 0,
         'HgbSum': 0, 'CompleteFrac': 'N',
-        'AoverS': 0, 'CoverS': 0, 'DoverS': 0, 'EoverS': 0, 'VoverS': 0,
-        'AoverC': 0, 'AoverD': 0, 'AoverE': 0, 'AoverV': 0,
+        'AoverS': np.nan, 'CoverS': np.nan, 'DoverS': np.nan, 'EoverS': np.nan, 'VoverS': np.nan,
+        'AoverC': np.nan, 'AoverD': np.nan, 'AoverE': np.nan, 'AoverV': np.nan,
         'PostTfx': 'N', 'PostHU': 'N',
         'AvgHgbTotal': 0,
     }
