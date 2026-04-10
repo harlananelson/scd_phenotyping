@@ -35,18 +35,83 @@ OPTIONAL_SUBS = ['HgbA2', 'HgbD', 'HgbE', 'HgbO']
 
 ALL_SUBS = REQUIRED_SUBS + OPTIONAL_SUBS
 
+# ---------------------------------------------------------------------------
+# Clinical Thresholds (documented with rationale)
+# Reference: kwuichet/SCD_PHenotyping algorithm
+# ---------------------------------------------------------------------------
+
 # Fractionation completeness bounds (percentage)
+# A complete Hb electrophoresis sums to ~100%. Range accounts for lab variability.
 FRAC_MIN = 90
 FRAC_MAX = 105
 
-# Transfusion inference threshold (percentage point range)
+# Transfusion inference threshold (percentage point range in HgbA or HgbS)
+# If max-min range >= 10pp, patient likely received transfusions
 TFX_RANGE_THRESHOLD = 10
 
 # Post-transfusion threshold (days since actual transfusion)
+# Within 180 days, transfused RBCs contribute HbA, altering fractionation
 TFX_DAYS_THRESHOLD = 180
 
 # Post-hydroxyurea threshold (days since HU prescription)
+# HU raises HbF; within 90 days, HbF levels may reflect treatment not genotype
 HU_DAYS_THRESHOLD = 90
+
+# Lab error threshold: HgbS values <= this considered clinically absent
+# Accounts for HPLC/electrophoresis measurement noise
+LAB_ERROR_THRESHOLD = 5.0
+
+# --- Compound hemoglobinopathy ratios (Step 1) ---
+# SC disease: HbC and HbS are co-dominant, expected CoverS ~1.0
+# Range 0.6-1.4 accounts for expression variability
+SC_RATIO_LOWER = 0.6
+SC_RATIO_UPPER = 1.4
+
+# SD disease: same co-dominant logic as SC
+SD_RATIO_LOWER = 0.6
+SD_RATIO_UPPER = 1.4
+
+# SE disease: HbE typically 20-30% of total, HbS 50-60%
+# Lower ratio range because HbE expression is inherently lower
+SE_RATIO_LOWER = 0.3
+SE_RATIO_UPPER = 0.7
+
+# SVar (other variants): same range as SC/SD
+SVAR_RATIO_LOWER = 0.6
+SVAR_RATIO_UPPER = 1.4
+
+# --- Non-SCD hemoglobinopathy ratios (Step 2) ---
+# Trait: A/variant ratio 0.9-3.25 (heterozygous carrier)
+# Disease: A/variant ratio < 0.5 (homozygous or compound het)
+# Indeterminate: 0.5-0.9 (borderline)
+NON_SCD_TRAIT_RANGE = (0.9, 3.25)
+NON_SCD_DISEASE_UPPER = 0.5
+NON_SCD_INDET_RANGE = (0.5, 0.9)
+
+# Beta-thalassemia: HbA2 > 3.5% is standard clinical cutoff
+# Using 4% for specificity in a phenotyping (not diagnostic) context
+BETA_THAL_HBA2_THRESHOLD = 4.0
+
+# --- Sickle trait identification ---
+# In sickle trait, HbA > HbS (typically 55-65% A, 30-40% S)
+# A/S ratio between 1.0 and 2.0
+TRAIT_AS_RATIO_LOWER = 1.0
+TRAIT_AS_RATIO_UPPER = 2.0
+
+# --- Incomplete fractionation heuristics (Step 4b) ---
+# When fractionation is incomplete, use absolute HgbS level
+HBS_DEFINITIVE_SCA = 80    # Very high S → definitive SCA
+HBS_LIKELY_SCA = 70         # High S → likely SCA
+HBS_POSSIBLE_SCA = 50       # Moderate S → needs context (A level, tfx status)
+HBS_INDETERMINATE = 60      # SCD_Indeterminate threshold
+HBS_S_INDETERMINATE = 50    # S_Indeterminate threshold
+
+# --- SPFH detection ---
+# S-pattern with persistent fetal hemoglobin
+# Requires: HbF >= 20%, HbS >= 40%, total Hb > 12 g/dL, not on HU
+SPFH_HBF_MIN = 20
+SPFH_HBS_MIN = 40
+SPFH_TOTAL_HB_MIN = 12
 
 # Ratio definitions: (numerator_col, denominator_col)
 RATIO_DEFINITIONS: Dict[str, Tuple[str, str]] = {
@@ -569,17 +634,17 @@ def classify_lab_row(
     a_over_v = _get_ratio(row, 'AoverV')
 
     # ---- STEP 1: Compound hemoglobinopathies (any age) ----
-    if _in_range(c_over_s, 0.6, 1.4):
+    if _in_range(c_over_s, SC_RATIO_LOWER, SC_RATIO_UPPER):
         return 'SCD_SC'
-    if _in_range(d_over_s, 0.6, 1.4):
+    if _in_range(d_over_s, SD_RATIO_LOWER, SD_RATIO_UPPER):
         return 'SCD_SD'
-    if _in_range(e_over_s, 0.3, 0.7):
+    if _in_range(e_over_s, SE_RATIO_LOWER, SE_RATIO_UPPER):
         return 'SCD_SE'
-    if _in_range(v_over_s, 0.6, 1.4):
+    if _in_range(v_over_s, SVAR_RATIO_LOWER, SVAR_RATIO_UPPER):
         return 'SCD_SVar'
 
     # ---- STEP 2: Non-SCD hemoglobinopathies (only if not SCD-only dataset) ----
-    if not dataset_scd and complete == 'Y' and hgb_s <= 5:
+    if not dataset_scd and complete == 'Y' and hgb_s <= LAB_ERROR_THRESHOLD:
         if post_tfx == 'N':
             # HemC
             if a_over_c is not None:
@@ -606,7 +671,7 @@ def classify_lab_row(
                 if _in_range(a_over_e, *NON_SCD_INDET_RANGE):
                     return 'HemE_Indeterminate'
             # Beta Thalassemia
-            if hgb_a2 > 4:
+            if hgb_a2 > BETA_THAL_HBA2_THRESHOLD:
                 return 'BetaThalassemia'
             # Not SCD
             if age is not None and age >= 2 and hgb_s == 0 and hgb_o == 0:
@@ -622,15 +687,15 @@ def classify_lab_row(
 
     # ---- STEP 3: Age < 2 (pediatric branch) ----
     if age is not None and age < 2:
-        if hgb_s >= 5:
+        if hgb_s >= LAB_ERROR_THRESHOLD:
             if complete == 'Y':
                 if hgb_a <= 1:
                     return 'SCD_SCA_Likely'
-                if a_over_s is not None and a_over_s < 0.6:
+                if a_over_s is not None and a_over_s < SC_RATIO_LOWER:
                     if post_tfx == 'Y':
                         return 'SCD_SCA_Likely'
                     return 'SCD_Indeterminate'
-                if a_over_s is not None and _in_range(a_over_s, 0.6, 2.0):
+                if a_over_s is not None and _in_range(a_over_s, SC_RATIO_LOWER, TRAIT_AS_RATIO_UPPER):
                     if post_tfx == 'N':
                         return 'S_Trait'
                     return 'S_Indeterminate'
@@ -640,18 +705,18 @@ def classify_lab_row(
     # ---- STEP 4: Age >= 2 (or age unknown — treated as adult) ----
     if complete == 'Y':
         # SPFH check
-        if run_spfh and hgb_f >= 20 and hgb_s >= 40 and avg_total > 12 and post_hu == 'N':
+        if run_spfh and hgb_f >= SPFH_HBF_MIN and hgb_s >= SPFH_HBS_MIN and avg_total > SPFH_TOTAL_HB_MIN and post_hu == 'N':
             return 'SCD_SPFH'
 
         # Variant hemoglobin (no HgbS, but HgbO present)
         if hgb_s == 0 and (
-            (a_over_v is not None and a_over_v <= 3.25)
+            (a_over_v is not None and a_over_v <= NON_SCD_TRAIT_RANGE[1])
             or (hgb_o > 0 and hgb_a == 0)
         ):
             return 'Hem_Variant'
 
         # Definitive SCD SCA: high S, no/very low A, no O
-        if hgb_s >= 5 and hgb_a <= 5 and hgb_o == 0:
+        if hgb_s >= LAB_ERROR_THRESHOLD and hgb_a <= LAB_ERROR_THRESHOLD and hgb_o == 0:
             return 'SCD_SCA'
 
         # High S, moderate A — needs transfusion disambiguation
@@ -661,26 +726,26 @@ def classify_lab_row(
             return 'SCD_Sbetap_Likely'
 
         # Sickle trait pattern: A > S
-        if hgb_s >= 5 and a_over_s is not None and _in_range(a_over_s, 1.0, 2.0) and post_tfx == 'N':
+        if hgb_s >= LAB_ERROR_THRESHOLD and a_over_s is not None and _in_range(a_over_s, TRAIT_AS_RATIO_LOWER, TRAIT_AS_RATIO_UPPER) and post_tfx == 'N':
             return 'S_Trait'
 
         # S present but inconclusive
-        if hgb_s >= 5:
+        if hgb_s >= LAB_ERROR_THRESHOLD:
             return 'S_Indeterminate'
 
     # ---- Incomplete fractionation fallbacks ----
     if hgb_sum < FRAC_MIN and hgb_sum > 0:
-        if hgb_s >= 80:
+        if hgb_s >= HBS_DEFINITIVE_SCA:
             return 'SCD_SCA'
-        if hgb_s >= 70:
+        if hgb_s >= HBS_LIKELY_SCA:
             return 'SCD_SCA_Likely'
-        if hgb_s >= 50 and hgb_a <= 5:
+        if hgb_s >= HBS_POSSIBLE_SCA and hgb_a <= LAB_ERROR_THRESHOLD:
             return 'SCD_SCA_Likely'
-        if hgb_s >= 50 and post_tfx == 'Y':
+        if hgb_s >= HBS_POSSIBLE_SCA and post_tfx == 'Y':
             return 'SCD_SCA_Likely'
-        if hgb_s >= 60:
+        if hgb_s >= HBS_INDETERMINATE:
             return 'SCD_Indeterminate'
-        if hgb_s >= 50:
+        if hgb_s >= HBS_S_INDETERMINATE:
             return 'S_Indeterminate'
 
     if hgb_sum > FRAC_MAX:
