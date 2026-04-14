@@ -211,8 +211,12 @@ def pivot_lab_data(
         .drop_duplicates(subset=[id_col, date_col, hgb_type_col], keep='first')
     )
 
+    index_cols = [id_col, date_col]
+    if age_col is not None and age_col in deduped.columns:
+        index_cols.append(age_col)
+
     wide = deduped.pivot_table(
-        index=[id_col, date_col, age_col],
+        index=index_cols,
         columns=hgb_type_col,
         values=value_col,
         aggfunc='first'
