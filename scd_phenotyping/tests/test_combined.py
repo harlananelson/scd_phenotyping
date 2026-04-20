@@ -21,8 +21,8 @@ class TestRunCombinedPhenotyping:
         })
         combined, scd = run_combined_phenotyping(icd_df, lab_df)
         assert len(combined) == 2
-        assert combined[combined['personid'] == 1]['ConsensusPhenotype'].iloc[0] == 'SCD_SCA'
-        assert combined[combined['personid'] == 2]['ConsensusPhenotype'].iloc[0] == 'SCD_SC'
+        assert combined[combined['personid'] == 1]['PersonPhenotype'].iloc[0] == 'SCD_SCA'
+        assert combined[combined['personid'] == 2]['PersonPhenotype'].iloc[0] == 'SCD_SC'
         assert len(scd) == 2
 
     def test_icd_only_fallback(self):
@@ -38,8 +38,11 @@ class TestRunCombinedPhenotyping:
         combined, scd = run_combined_phenotyping(icd_df, lab_df)
         assert len(combined) == 2
         p1 = combined[combined['personid'] == 1]
-        assert p1['ConsensusPhenotype'].iloc[0] == 'SCD'
-        assert p1['PhenotypeSource'].iloc[0] == 'ICD_only'
+        # run_combined_phenotyping keeps both IcdPheno and PersonPhenotype
+        # separate; there is no ConsensusPhenotype or PhenotypeSource.
+        # ICD-only persons get IcdPheno set, PersonPhenotype null.
+        assert p1['IcdPheno'].iloc[0] == 'SCD'
+        assert pd.isna(p1['PersonPhenotype'].iloc[0])
 
     def test_scd_cohort_extraction(self):
         """SCD cohort includes both ICD=SCD and Lab=SCD_*."""
