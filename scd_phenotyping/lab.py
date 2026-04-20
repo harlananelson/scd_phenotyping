@@ -204,6 +204,18 @@ def pivot_lab_data(
     df[value_col] = df[value_col].apply(extract_numeric)
     df = df.dropna(subset=[value_col])
 
+    # Normalize pivot keys BEFORE pivoting: source data has whitespace and
+    # case drift (e.g. "HgbS ", "hbgs", "Hgb s") which produces un-
+    # referenceable pivot columns and breaks calculate_ratios silently.
+    # Reviewer L12.
+    df = df.copy()
+    df[hgb_type_col] = (
+        df[hgb_type_col]
+        .astype(str)
+        .str.strip()
+        .str.replace(r'\s+', '', regex=True)
+    )
+
     # Pivot: keep first occurrence per person-date-hgbType
     deduped = (
         df
