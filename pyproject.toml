@@ -18,8 +18,5 @@ test = [
     "pytest>=7.0",
 ]
 
-[project.scripts]
-scd-phenotype = "scd_phenotyping.icd:main"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
